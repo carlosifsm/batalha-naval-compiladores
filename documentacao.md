@@ -86,18 +86,16 @@ class BatalhaNavalLexer(Lexer):
 ### 3.1 Gramática Livre de Contexto
 
 ```
-Game         → Statements
-Statements   → Statements SEMICOLON Statement
-             | Statement
-Statement    → SetupTurn
-             | StartCmd
-             | BattleAction
+Game         → SetupPhase SEMICOLON StartCmd SEMICOLON BattlePhase
+SetupPhase   → SetupPhase SEMICOLON SetupTurn 
+             | SetupTurn 
+BattlePhase  →  BattlePhase SEMICOLON BattleAction 
+             | BattleAction 
 SetupTurn    → PLAYER COLON ShipList
 ShipList     → ShipList COMMA Ship
              | Ship
 Ship         → SHIP NUM AT COORD Direction
-Direction    → VERTICAL
-             | HORIZONTAL
+Direction    → VERTICAL | HORIZONTAL
 StartCmd     → START
 BattleAction → PLAYER COLON FIRE COORD
 ```
@@ -106,14 +104,15 @@ BattleAction → PLAYER COLON FIRE COORD
 
 **Terminais (tokens):** SHIP, AT, FIRE, START, VERTICAL, HORIZONTAL, PLAYER, COORD, NUM, COLON, SEMICOLON, COMMA
 
-**Não-terminais:** Game, Statements, Statement, SetupTurn, ShipList, Ship, Direction, StartCmd, BattleAction
+**Não-terminais:** Game, SetupPhase, SetupTurn, BattlePhase, BattleAction, ShipList, Ship, Direction, StartCmd
 
 **Símbolo inicial:** Game
 
 ### 3.3 Regras de Precedência e Ambiguidade
 
-A gramática é **não ambígua** por construção:
-- A lista de comandos (`Statements`) é associativa à esquerda (recursão à esquerda)
+- A gramática é **não ambígua** por construção
+- A sequência principal possui uma ordem fixa (`SetupPhase → StartCmd → BattlePhase`)
+- As listas de comandos (`SetupPhase | BattlePhase`) são associativa à esquerda (recursão à esquerda)
 - A lista de navios (`ShipList`) é associativa à esquerda
 - Não há conflitos de precedência pois os operadores são delimitadores fixos (`;` e `,`)
 - O token `PLAYER` usa lookahead léxico (`(?=\s*:)`) para distinguir de coordenadas
@@ -142,22 +141,23 @@ class BatalhaNavalParser(Parser):
 
 | # | Produção | Ação Semântica |
 |---|----------|----------------|
-| 1 | Game → Statements | Imprime tabuleiros finais e estatísticas |
-| 2 | Statements → Statements SEMICOLON Statement | Encadeia comandos sequencialmente |
-| 3 | Statements → Statement | Comando único (caso base) |
-| 4 | Statement → SetupTurn | Repassa resultado do setup |
-| 5 | Statement → StartCmd | Repassa resultado do start |
-| 6 | Statement → BattleAction | Repassa resultado do disparo |
-| 7 | SetupTurn → PLAYER COLON ShipList | {verificaFase("SETUP"); para cada coord em ShipList: tabuleiros[PLAYER][coord] = 'N'} |
+| 1 | Game → SetupPhase SEMICOLON StartCmd SEMICOLON BattlePhase | Executa o programa completo, imprime o estado final dos tabuleiros e estatísticas da partida |
+| 2 | SetupPhase → SetupPhase SEMICOLON SetupTurn | Encadeia comandos de configuração de jogadores durante a fase SETUP |
+| 3 | SetupPhase → SetupTurn | Caso base da fase de configuração |
+| 4 | BattlePhase → BattlePhase SEMICOLON BattleAction | Encadeia comandos de disparo durante a fase de batalha |
+| 5 | BattlePhase → BattleAction | Caso base da fase de batalha |
+| 7 | SetupTurn → PLAYER COLON ShipList | { para cada coord em ShipList: tabuleiros[PLAYER][coord] = 'N'} |
 | 8 | ShipList → ShipList COMMA Ship | {ShipList.val = ShipList₁.val + [Ship.val]} |
 | 9 | ShipList → Ship | {ShipList.val = [Ship.val]} |
 | 10 | Ship → SHIP NUM AT COORD Direction | {Ship.val = calculaCoordenadas(NUM, COORD, Direction)} |
 | 11 | Direction → VERTICAL | {Direction.val = 'v'} |
 | 12 | Direction → HORIZONTAL | {Direction.val = 'h'} |
-| 13 | StartCmd → START | {verificaFase("SETUP"); fase = "BATALHA"; imprimeTabuleiros()} |
-| 14 | BattleAction → PLAYER COLON FIRE COORD | {verificaFase("BATALHA"); executaDisparo(PLAYER, COORD)} |
+| 13 | StartCmd → START | {imprimeTabuleiros()} |
+| 14 | BattleAction → PLAYER COLON FIRE COORD | {executaDisparo(PLAYER, COORD)} |
 
 ### 4.1 Detalhamento das Ações Semânticas Principais
+
+# REVER
 
 **Produção 10 - Cálculo de Coordenadas do Navio:**
 ```
@@ -199,67 +199,130 @@ Ação:
 
 ### 5.1 Exemplo de Sentença Aceita
 
-Sentença: `A: ship 3 at A1 h; start; A: fire A1`
+Sentença: 
+```
+  A: ship 3 at A1 h, ship 4 A2 v;
+  B: ship 2 at C3 v; 
+  start;
+  A: fire D4;
+  B: fire A1
+```
 
 ### 5.2 Árvore de Derivação
+#### Completo
+```mermaid
+graph TD
 
+    Game --> SetupPhase
+    Game --> SC1[";"]
+    Game --> StartCmd
+    Game --> SC2[";"]
+    Game --> BattlePhase
+
+    SetupPhase --> SetupPhase1["SetupPhase"]
+    SetupPhase --> SC3[";"]
+    SetupPhase --> SetupTurn2["SetupTurn"]
+
+    SetupPhase1 --> SetupTurn1["SetupTurn"]
+
+    SetupTurn1 --> P1["PLAYER(A)"]
+    SetupTurn1 --> COL1[":"]
+    SetupTurn1 --> ShipList1["ShipList"]
+
+    ShipList1 --> ShipList11["ShipList"]
+    ShipList1 --> COM1[","]
+    ShipList1 --> Ship1["Ship"]
+    Ship1 --> S1["SHIP"]
+    Ship1 --> N1["NUM(3)"]
+    Ship1 --> A1["AT"]
+    Ship1 --> C1["COORD(A1)"]
+    Ship1 --> D1["HORIZONTAL"]
+
+    ShipList11 --> Ship11["Ship"]
+    Ship11 --> S11["SHIP"]
+    Ship11 --> N11["NUM(4)"]
+    Ship11 --> A11["AT"]
+    Ship11 --> C11["COORD(A2)"]
+    Ship11 --> D11["HORIZONTAL"]
+
+    SetupTurn2 --> P2["PLAYER(B)"]
+    SetupTurn2 --> COL2[":"]
+    SetupTurn2 --> ShipList2["ShipList"]
+
+    ShipList2 --> Ship2["Ship"]
+    Ship2 --> S2["SHIP"]
+    Ship2 --> N2["NUM(2)"]
+    Ship2 --> C2["COORD(C3)"]
+    Ship2 --> D2["VERTICAL"]
+
+    StartCmd --> START
+
+    BattlePhase --> BattlePhase1["BattlePhase"]
+    BattlePhase --> SC4[";"]
+    BattlePhase --> BattleAction2["BattleAction"]
+
+    BattlePhase1 --> BattleAction1["BattleAction"]
+
+    BattleAction1 --> BA1P["PLAYER(A)"]
+    BattleAction1 --> COL3[":"]
+    BattleAction1 --> BA1F["FIRE"]
+    BattleAction1 --> BA1C["COORD(D4)"]
+
+    BattleAction2 --> BA2P["PLAYER(B)"]
+    BattleAction2 --> COL4[":"]
+    BattleAction2 --> BA2F["FIRE"]
+    BattleAction2 --> BA2C["COORD(A1)"]
 ```
-                              Game
-                               |
-                           Statements
-                          /    |     \
-                   Statements  ;   Statement
-                  /    |    \         |
-           Statements  ;  Statement  BattleAction
-               |             |       /  |   \   \
-           Statement      StartCmd  A   :  fire  A1
-               |             |
-           SetupTurn       start
-          /    |    \
-         A     :   ShipList
-                      |
-                    Ship
-                 /  |  |  \   \
-              ship  3  at  A1   Direction
-                                   |
-                                   h
+
+#### Reduzido
+```mermaid
+graph TD
+
+    Game --> SetupPhase
+    Game --> SC1[";"]
+    Game --> StartCmd
+    Game --> SC2[";"]
+    Game --> BattlePhase
+
+    SetupPhase --> SetupPhase1["SetupPhase"]
+    SetupPhase --> SC3[";"]
+    SetupPhase --> SetupTurn2["SetupTurn"]
+
+    SetupPhase1 --> SetupTurn1["SetupTurn"]
+
+    SetupTurn1 --> P1["PLAYER(A)"]
+    SetupTurn1 --> COL1[":"]
+    SetupTurn1 --> ShipList1["ShipList"]
+
+    ShipList1 --> ShipList11["ShipList"]
+    ShipList1 --> COM1[","]
+    ShipList1 --> Ship1["Ship"]
+
+    ShipList11 --> Ship11["Ship"]
+
+    SetupTurn2 --> P2["PLAYER(B)"]
+    SetupTurn2 --> COL2[":"]
+    SetupTurn2 --> ShipList2["ShipList"]
+
+    ShipList2 --> Ship2["Ship"]
+
+    StartCmd --> START
+
+    BattlePhase --> BattlePhase1["BattlePhase"]
+    BattlePhase --> SC4[";"]
+    BattlePhase --> BattleAction2["BattleAction"]
+
+    BattlePhase1 --> BattleAction1["BattleAction"]
 ```
 
 ### 5.3 Árvore de Derivação Anotada (Decorada)
 
 Para a mesma sentença `A: ship 3 at A1 h; start; A: fire A1`:
 
-```
-                         Game.resultado = True
-                               |
-                     Statements.val = True
-                    /          |          \
-         Statements.val=True   ;    Statement.val = True
-         /        |        \              |
-  Statements      ;    Statement     BattleAction
-  .val=True            .val=True     .resultado="ACERTOU"
-      |                    |         /   |    \     \
-  Statement            StartCmd     A    :   fire   A1
-  .val=True            .fase=                .alvo="A1"
-      |                "BATALHA"             .oponente="B"
-  SetupTurn
-  .jogador="A"
-  .navios=[['A1','A2','A3']]
-  /    |    \
- A     :   ShipList.val = [['A1','A2','A3']]
-                |
-            Ship.val = ['A1','A2','A3']
-           /  |   |    \      \
-        ship  3   at   A1    Direction.val = 'h'
-        NUM.val=3      COORD="A1"    |
-                                     h
-```
-
 **Atributos calculados:**
 - `Ship.val = ['A1', 'A2', 'A3']` (navio de tamanho 3, horizontal a partir de A1)
 - `ShipList.val = [['A1', 'A2', 'A3']]` (lista com um navio)
 - `SetupTurn`: insere {A1:'N', A2:'N', A3:'N'} no tabuleiro de A
-- `StartCmd`: muda fase para "BATALHA"
 - `BattleAction`: A dispara em A1 → verifica tabuleiro de B → resultado
 
 ---
@@ -403,30 +466,6 @@ D |   |   | N |   |   |   |   |   |   |   |
 python batalha_naval.py
 ```
 
-### 10.3 Modo Interativo
-O programa oferece modo interativo onde o usuário digita comandos um a um:
-```
-[SETUP] > A: ship 3 at A1 h
-[SETUP] > B: ship 2 at D4 v
-[SETUP] > start
-[BATALHA] > A: fire D4
-[BATALHA] > B: fire A1
-```
-
----
-
-## 11. Comparação com LEX/YACC Tradicional
-
-| Aspecto | LEX/YACC (C) | SLY (Python) |
-|---------|--------------|--------------|
-| Definições | Seção antes de `%%` | Atributos de classe |
-| Regras léxicas | `padrão { ação }` | `TOKEN = r'regex'` ou `@_(r'regex')` |
-| Regras gramaticais | `simb : exp { $$ = $1 }` | `@_('exp') def simb(self, p):` |
-| Ações semânticas | Código C entre `{ }` | Corpo do método Python |
-| Referência a símbolos | `$1, $2, $$` | `p.NOME_TOKEN`, `return valor` |
-| Código do usuário | Seção após último `%%` | Métodos adicionais na classe |
-| Arquivo de saída | `.tab.c`, `lex.yy.c` | Execução direta em Python |
-
 ---
 
 ## 12. Uso de IA
@@ -437,7 +476,6 @@ O programa oferece modo interativo onde o usuário digita comandos um a um:
 ### 12.2 Alterações Realizadas
 - Estruturação completa da gramática a partir dos trechos dispersos no arquivo `codigo`
 - Correção de conflitos de nomes entre tokens e regras do parser (START)
-- Reestruturação da gramática para eliminar ambiguidade (uso de `Statements` genérico)
 - Adição de expressões regulares com lookahead para PLAYER (`(?=\s*:)`)
 - Implementação completa das ações semânticas de execução do jogo
 - Criação da visualização do tabuleiro no terminal

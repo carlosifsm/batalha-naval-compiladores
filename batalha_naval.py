@@ -38,6 +38,9 @@ class BatalhaNavalLexer(Lexer):
     - Delimitadores: COLON (:), SEMICOLON (;), COMMA (,)
     """
 
+    def __init__(self):
+        self.erro_lexico = False
+
     # Conjunto de tokens da linguagem
     tokens = {
         SHIP, AT, FIRE, START,
@@ -88,6 +91,7 @@ class BatalhaNavalLexer(Lexer):
 
     # --- Tratamento de Erros Lexicos ---
     def error(self, t):
+        self.erro_lexico = True
         print(f"{Cor.VERMELHO}[ERRO LEXICO] Caractere ilegal '{t.value[0]}' na linha {self.lineno}{Cor.RESET}")
         self.index += 1
 
@@ -101,18 +105,17 @@ class BatalhaNavalLexer(Lexer):
 #
 # GRAMATICA LIVRE DE CONTEXTO (resumo):
 #
-#   Game         -> Statements
-#   Statements   -> Statements SEMICOLON Statement
-#                | Statement
-#   Statement    -> SetupTurn
-#                | StartCmd
-#                | BattleAction
+#   Game         -> SetupPhase SEMICOLON StartCmd SEMICOLON BattlePhase
+#   SetupPhase   -> SetupPhase SEMICOLON SetupTurn 
+#                | SetupTurn 
+#   BattlePhase  -> BattlePhase SEMICOLON BattleAction 
+#                | BattleAction    
 #   SetupTurn    -> PLAYER COLON ShipList
 #   ShipList     -> ShipList COMMA Ship
 #                | Ship
 #   Ship         -> SHIP NUM AT COORD Direction
 #   Direction    -> VERTICAL | HORIZONTAL
-#   StartCmd     -> START
+#   StartCmd     -> START 
 #   BattleAction -> PLAYER COLON FIRE COORD
 #
 # ============================================================================
@@ -128,13 +131,11 @@ class BatalhaNavalParser(Parser):
     # Desabilitar log de debug do SLY
     debuglevel = 0
 
-    def __init__(self, animado=True, interativo=False):
+    def __init__(self, animado=True):
         """Inicializa o estado do jogo (acoes semanticas de inicializacao)."""
         self.animado = animado
-        self.interativo = interativo
         
         # Estado do jogo
-        self.fase = "SETUP"
         self.jogo_terminado = False
         self.erro_semantico = False
 
@@ -161,47 +162,39 @@ class BatalhaNavalParser(Parser):
     # PRODUCOES E ACOES SEMANTICAS
     # ========================================================================
 
-    # --- Producao: Game -> Statements ---
-    @_('Statements')
+    # --- Producao: Game -> SetupPhase SEMICOLON StartCmd SEMICOLON BattlePhase ---
+    @_('SetupPhase SEMICOLON StartCmd SEMICOLON BattlePhase')
     def Game(self, p):
         """Regra inicial: o jogo eh uma sequencia de comandos."""
-        if not self.interativo:
-            if self.erro_semantico:
+        if self.erro_semantico:
                 print(f"\n{Cor.VERMELHO}Execucao abortada devido a erro(s) semantico(s).{Cor.RESET}")
-            else:
-                if not self.jogo_terminado and self.fase == "BATALHA":
+        else:
+                if not self.jogo_terminado:
                     print(f"\n{Cor.AMARELO}{'=' * 50}")
                     print(f"     FIM DO JOGO - SEM VENCEDOR DEFINIDO")
                     print(f"{'=' * 50}{Cor.RESET}")
                 self._imprimir_tabuleiros_finais()
         return True
 
-    # --- Producao: Statements -> Statements SEMICOLON Statement ---
-    @_('Statements SEMICOLON Statement')
-    def Statements(self, p):
-        """Lista de comandos separados por ponto-e-virgula."""
+    # --- Producao: SetupPhase -> SetupPhase SEMICOLON SetupTurn ---
+    @_('SetupPhase SEMICOLON SetupTurn')
+    def SetupPhase(self, p):
         return True
-
-    # --- Producao: Statements -> Statement ---
-    @_('Statement')
-    def Statements(self, p):
-        """Comando unico."""
-        return True
-
-    # --- Producao: Statement -> SetupTurn ---
+ 
+    # --- Producao: SetupPhase -> SetupTurn ---
     @_('SetupTurn')
-    def Statement(self, p):
-        return p.SetupTurn
+    def SetupPhase(self, p):
+        return True
 
-    # --- Producao: Statement -> StartCmd ---
-    @_('StartCmd')
-    def Statement(self, p):
-        return p.StartCmd
+    # --- Producao: BattlePhase -> BattlePhase SEMICOLON BattleAction ---
+    @_('BattlePhase SEMICOLON BattleAction')
+    def BattlePhase(self, p):
+        return True
 
-    # --- Producao: Statement -> BattleAction ---
+    # --- Producao: BattlePhase -> BattleAction ---
     @_('BattleAction')
-    def Statement(self, p):
-        return p.BattleAction
+    def BattlePhase(self, p):
+        return True
 
     # --- Producao: SetupTurn -> PLAYER COLON ShipList ---
     # Acao Semantica: Posiciona navios do jogador no tabuleiro
@@ -213,12 +206,6 @@ class BatalhaNavalParser(Parser):
         """
         jogador = p.PLAYER
         navios = p.ShipList
-
-        # Validacao semantica: fase correta
-        if self.fase != "SETUP":
-            print(f"{Cor.VERMELHO}[ERRO SEMANTICO] Nao eh possivel posicionar navios na fase de batalha.{Cor.RESET}")
-            self.erro_semantico = True
-            return None
 
         # Inserir cada coordenada no tabuleiro do jogador
         for coords_navio in navios:
@@ -315,20 +302,12 @@ class BatalhaNavalParser(Parser):
         Comando de inicio da batalha.
         Acao Semantica: Transiciona para fase de batalha.
         """
-        if self.fase == "SETUP":
-            if not self.tabuleiros['A'] and not self.tabuleiros['B']:
-                print(f"{Cor.AMARELO}[AVISO] Nenhum navio foi posicionado!{Cor.RESET}")
-            self.fase = "BATALHA"
-            
-            if self.animado:
-                tela_setup_completo(self.tabuleiros, self.disparos)
-            else:
-                print("\n" + "=" * 50)
-                print("       BATALHA NAVAL - FASE DE BATALHA")
-                print("=" * 50)
+        if self.animado:
+            tela_setup_completo(self.tabuleiros, self.disparos)
         else:
-            print(f"{Cor.VERMELHO}[ERRO SEMANTICO] O jogo ja esta na fase de batalha.{Cor.RESET}")
-            self.erro_semantico = True
+            print("\n" + "=" * 50)
+            print("       BATALHA NAVAL - FASE DE BATALHA")
+            print("=" * 50)
         return True
 
     # --- Producao: BattleAction -> PLAYER COLON FIRE COORD ---
@@ -347,12 +326,6 @@ class BatalhaNavalParser(Parser):
         """
         if self.jogo_terminado:
             print(f"{Cor.DIM}[INFO] O jogo ja terminou. Disparos ignorados.{Cor.RESET}")
-            return None
-
-        if self.fase != "BATALHA":
-            print(f"{Cor.VERMELHO}[ERRO SEMANTICO] Nao eh possivel disparar na fase de setup. "
-                  f"Use 'start' primeiro.{Cor.RESET}")
-            self.erro_semantico = True
             return None
 
         jogador = p.PLAYER
@@ -429,6 +402,8 @@ class BatalhaNavalParser(Parser):
             print(f"{Cor.VERMELHO}[ERRO SINTATICO] Fim inesperado da entrada. "
                   f"Verifique se o programa esta completo.{Cor.RESET}")
 
+        raise SyntaxError("Erro sintatico encontrado")
+
 
 # ============================================================================
 # 3. EXECUCAO PRINCIPAL
@@ -479,54 +454,25 @@ def executar_programa(codigo, animado=True):
         print()
         print("--- ANALISE SINTATICA E SEMANTICA ---")
 
-    resultado = parser.parse(lexer.tokenize(codigo))
+    if lexer.erro_lexico:
+        print(
+            f"{Cor.VERMELHO}"
+            "Execucao abortada devido a erro lexico."
+            f"{Cor.RESET}"
+        )
+        return False
+
+    try:
+        resultado = parser.parse(lexer.tokenize(codigo))
+    except SyntaxError:
+        print(
+            f"{Cor.VERMELHO}"
+            "Execucao abortada devido a erro sintatico."
+            f"{Cor.RESET}"
+        )
+        return False
+
     return resultado
-
-
-def modo_interativo():
-    """
-    Modo interativo: jogo multiplayer por turnos com animacoes.
-    """
-    lexer = BatalhaNavalLexer()
-    parser = BatalhaNavalParser(animado=True, interativo=True)
-
-    animar_titulo()
-    print(f"  {Cor.BOLD}MODO INTERATIVO - MULTIPLAYER{Cor.RESET}")
-    print()
-    print(f"  {Cor.DIM}Comandos disponiveis:{Cor.RESET}")
-    print(f"    {Cor.VERDE}Fase SETUP:{Cor.RESET}    A: ship <tam> at <coord> <dir>")
-    print(f"    {Cor.AMARELO}Iniciar:{Cor.RESET}       start")
-    print(f"    {Cor.VERMELHO}Fase BATALHA:{Cor.RESET}  A: fire <coord>")
-    print(f"    {Cor.DIM}Ver tabuleiro:{Cor.RESET} ver")
-    print(f"    {Cor.DIM}Sair:{Cor.RESET}          sair")
-    print(f"    {Cor.DIM}Separar cmds:{Cor.RESET}  use ; entre comandos")
-    print()
-
-    while True:
-        try:
-            cor_fase = Cor.VERDE if parser.fase == "SETUP" else Cor.VERMELHO
-            prompt = f"  {cor_fase}[{parser.fase}]{Cor.RESET} > "
-            linha = input(prompt).strip()
-            if not linha:
-                continue
-            if linha.lower() == 'sair':
-                animar_texto(f"  {Cor.DIM}Encerrando jogo...{Cor.RESET}")
-                break
-            if linha.lower() == 'ver':
-                renderizar_lado_a_lado(parser.tabuleiros, parser.disparos, ocultar=False)
-                continue
-
-            parser.parse(lexer.tokenize(linha))
-
-            if parser.jogo_terminado:
-                parser._imprimir_tabuleiros_finais()
-                print(f"\n  {Cor.BOLD}Jogo encerrado!{Cor.RESET}")
-                break
-
-        except (KeyboardInterrupt, EOFError):
-            print(f"\n  {Cor.DIM}Encerrando...{Cor.RESET}")
-            mostrar_cursor()
-            break
 
 
 # ============================================================================
@@ -541,18 +487,15 @@ if __name__ == '__main__':
         import os
         os.system('')  # Habilita ANSI escape sequences no cmd.exe
     
-    if len(_sys.argv) > 1 and _sys.argv[1] == '--inter':
-        # Modo interativo: jogo multiplayer por turnos
-        modo_interativo()
-    elif len(_sys.argv) > 1 and _sys.argv[1] == '--simples':
+    if len(_sys.argv) > 1 and _sys.argv[1] == '--simples':
         # Modo sem animacao
         programa_exemplo = (
             "A: ship 3 at A1 h, ship 2 at C3 v; "
-            "start; "
-            "B: ship 3 at D4 v, ship 2 at A8 h; "
+            "B: ship 3 at D4 v, ship 2 at A8 h;"
             "start; "
             "A: fire D4; B: fire A1; "
             "A: fire E4; B: fire A2; "
+            "A: fire J4; B: fire J2; "
             "A: fire F4; B: fire A3; "
             "A: fire A8; B: fire C3; "
             "A: fire A9"
@@ -566,6 +509,7 @@ if __name__ == '__main__':
             "start; "
             "A: fire D4; B: fire A1; "
             "A: fire E4; B: fire A2; "
+            "A: fire J4; B: fire J2; "
             "A: fire F4; B: fire A3; "
             "A: fire A8; B: fire C3; "
             "A: fire A9"
