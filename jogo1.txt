@@ -1,0 +1,4 @@
+A: ship 3 at A1 h, ship 2 at C3 v; 
+B: ship 3 at D4 v, ship 2 at A8 h; 
+start; 
+A: fire D4; B: fire A1;

@@ -105,7 +105,7 @@ class BatalhaNavalLexer(Lexer):
 #
 # GRAMATICA LIVRE DE CONTEXTO (resumo):
 #
-#   Game         -> SetupPhase SEMICOLON StartCmd SEMICOLON BattlePhase
+#   Game         -> SetupPhase SEMICOLON StartCmd SEMICOLON BattlePhase SEMICOLON
 #   SetupPhase   -> SetupPhase SEMICOLON SetupTurn 
 #                | SetupTurn 
 #   BattlePhase  -> BattlePhase SEMICOLON BattleAction 
@@ -162,8 +162,8 @@ class BatalhaNavalParser(Parser):
     # PRODUCOES E ACOES SEMANTICAS
     # ========================================================================
 
-    # --- Producao: Game -> SetupPhase SEMICOLON StartCmd SEMICOLON BattlePhase ---
-    @_('SetupPhase SEMICOLON StartCmd SEMICOLON BattlePhase')
+    # --- Producao: Game -> SetupPhase SEMICOLON StartCmd SEMICOLON BattlePhase SEMICOLON ---
+    @_('SetupPhase SEMICOLON StartCmd SEMICOLON BattlePhase SEMICOLON')
     def Game(self, p):
         """Regra inicial: o jogo eh uma sequencia de comandos."""
         if self.erro_semantico:
@@ -487,23 +487,8 @@ if __name__ == '__main__':
         import os
         os.system('')  # Habilita ANSI escape sequences no cmd.exe
     
-    if len(_sys.argv) > 1 and _sys.argv[1] == '--simples':
-        # Modo sem animacao
-        programa_exemplo = (
-            "A: ship 3 at A1 h, ship 2 at C3 v; "
-            "B: ship 3 at D4 v, ship 2 at A8 h;"
-            "start; "
-            "A: fire D4; B: fire A1; "
-            "A: fire E4; B: fire A2; "
-            "A: fire J4; B: fire J2; "
-            "A: fire F4; B: fire A3; "
-            "A: fire A8; B: fire C3; "
-            "A: fire A9"
-        )
-        executar_programa(programa_exemplo, animado=False)
-    else:
-        # Modo padrao: executa programa completo com animacao
-        programa_exemplo = (
+    animado = True
+    programa_exemplo = (
             "A: ship 3 at A1 h, ship 2 at C3 v; "
             "B: ship 3 at D4 v, ship 2 at A8 h; "
             "start; "
@@ -512,6 +497,50 @@ if __name__ == '__main__':
             "A: fire J4; B: fire J2; "
             "A: fire F4; B: fire A3; "
             "A: fire A8; B: fire C3; "
-            "A: fire A9"
+            "A: fire A9;"
         )
-        executar_programa(programa_exemplo, animado=True)
+
+    # ------------------------------------------------------------------------
+    # Leitura de programa externo:
+    # python batalha_naval.py --cod arquivo.txt
+    # ------------------------------------------------------------------------
+    if '--cod' in _sys.argv:
+        try:
+            indice = _sys.argv.index('--cod')
+
+            if indice + 1 >= len(_sys.argv):
+                print(
+                    f"{Cor.VERMELHO}"
+                    "Erro: informe o nome do arquivo após --cod."
+                    f"{Cor.RESET}"
+                )
+                sys.exit(1)
+
+            arquivo = _sys.argv[indice + 1]
+
+            with open(arquivo, 'r', encoding='utf-8') as f:
+                programa_exemplo = f.read()
+
+        except FileNotFoundError:
+            print(
+                f"{Cor.VERMELHO}"
+                f"Erro: arquivo '{arquivo}' não encontrado."
+                f"{Cor.RESET}"
+            )
+            sys.exit(1)
+
+        except Exception as e:
+            print(
+                f"{Cor.VERMELHO}"
+                f"Erro ao ler arquivo: {e}"
+                f"{Cor.RESET}"
+            )
+            sys.exit(1)
+
+    # ------------------------------------------------------------------------
+    # Modo simples
+    # ------------------------------------------------------------------------
+    if '--simples' in _sys.argv:
+        animado = False
+
+    executar_programa(programa_exemplo, animado=animado)

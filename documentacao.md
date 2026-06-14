@@ -86,7 +86,7 @@ class BatalhaNavalLexer(Lexer):
 ### 3.1 Gramática Livre de Contexto
 
 ```
-Game         → SetupPhase SEMICOLON StartCmd SEMICOLON BattlePhase
+Game         → SetupPhase SEMICOLON StartCmd SEMICOLON BattlePhase SEMICOLON
 SetupPhase   → SetupPhase SEMICOLON SetupTurn 
              | SetupTurn 
 BattlePhase  →  BattlePhase SEMICOLON BattleAction 
@@ -141,7 +141,7 @@ class BatalhaNavalParser(Parser):
 
 | # | Produção | Ação Semântica |
 |---|----------|----------------|
-| 1 | Game → SetupPhase SEMICOLON StartCmd SEMICOLON BattlePhase | Executa o programa completo, imprime o estado final dos tabuleiros e estatísticas da partida |
+| 1 | Game → SetupPhase SEMICOLON StartCmd SEMICOLON BattlePhase SEMICOLON| Executa o programa completo, imprime o estado final dos tabuleiros e estatísticas da partida |
 | 2 | SetupPhase → SetupPhase SEMICOLON SetupTurn | Encadeia comandos de configuração de jogadores durante a fase SETUP |
 | 3 | SetupPhase → SetupTurn | Caso base da fase de configuração |
 | 4 | BattlePhase → BattlePhase SEMICOLON BattleAction | Encadeia comandos de disparo durante a fase de batalha |
@@ -462,18 +462,33 @@ D |   |   | N |   |   |   |   |   |   |   |
 - Biblioteca SLY: `pip install sly`
 
 ### 10.2 Execução do Exemplo
+Executa o programa padrão animado embutido no compilador:
 ```bash
 python batalha_naval.py
 ```
 
+### 10.3 Execução de um Programa Externo (--cod)
+É possível carregar um programa da linguagem Batalha Naval a partir de um arquivo '.txt'.
+```bash
+python batalha_naval.py --cod arquivo.txt
+```
+
+### 10.4 Execução sem Animações
+Esse modo desativa as animações de terminal.
+
+Para executar o exemplo em modo simplificado:
+```bash
+python batalha_naval.py --simples
+```
+
 ---
 
-## 12. Uso de IA
+## 11. Uso de IA
 
-### 12.1 Prompts Utilizados
+### 11.1 Prompts Utilizados
 - "Quero desenvolver meu trabalho de compiladores. As instruções dele estão em [caminho]. Quero que faça meu trabalho. Isso inclui principalmente as tabelas, árvores e o código em si do compilador. O que vai ser desenvolvido é um compilador para batalha naval."
 
-### 12.2 Alterações Realizadas
+### 11.2 Alterações Realizadas
 - Estruturação completa da gramática a partir dos trechos dispersos no arquivo `codigo`
 - Correção de conflitos de nomes entre tokens e regras do parser (START)
 - Adição de expressões regulares com lookahead para PLAYER (`(?=\s*:)`)
